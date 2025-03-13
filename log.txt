@@ -1,0 +1,46 @@
+random_forest:5折验证49800左右
+文件：xg.py 
+xgboost：{最佳参数: {'colsample_bytree': 0.8, 'learning_rate': 0.1, 'max_depth': 5, 'n_estimators': 200, 'subsample': 1.0}
+各折RMSE: [46671.66 49454.61 46644.12 47095.26 46715.37]
+平均RMSE: 47316.21 ± 1081.64}
+
+beyesian:{最佳参数: OrderedDict([('learning_rate', 0.08060751115836606), ('max_depth', 10), ('max_iter', 500), ('min_samples_leaf', 20)])
+最佳RMSE: 47348.94}
+=== 特征详情 ===
+总特征数: 16
+特征列表:
+                      特征名称
+                 longitude
+                  latitude
+        housing_median_age
+               total_rooms
+            total_bedrooms
+                population
+                households
+             median_income
+       rooms_per_household
+  population_per_household
+         bedrooms_per_room
+ ocean_proximity_<1H OCEAN
+    ocean_proximity_INLAND
+    ocean_proximity_ISLAND
+  ocean_proximity_NEAR BAY
+ocean_proximity_NEAR OCEAN
+
+预处理数据示例:
+   longitude  latitude  housing_median_age  total_rooms  total_bedrooms
+0  -1.321850  1.001021            1.845004    -0.856806       -0.787588
+1  -1.277011  2.030944           -0.140041    -0.714650       -0.749500
+
+=== 特征重要性排名 ===
+                     feature  importance
+7              median_income    0.268318
+12    ocean_proximity_INLAND    0.138992
+9   population_per_household    0.101266
+10         bedrooms_per_room    0.098580
+0                  longitude    0.086810
+1                   latitude    0.085396
+8        rooms_per_household    0.072936
+2         housing_median_age    0.038956
+5                 population    0.021547
+3                total_rooms    0.020212
