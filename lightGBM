@@ -1,0 +1,120 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import FunctionTransformer, StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from skopt import BayesSearchCV
+from skopt.space import Real, Integer, Categorical
+import logging
+import sys
+from lightgbm import LGBMRegressor
+
+# 配置日志记录
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler("hparam_tuning.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+# 统一数据预处理流程
+def data_pipeline():
+    """加载预处理数据并进行特征工程"""
+    try:
+        train = pd.read_csv('/home/majinrong/d2l-zh/housing-price-prediction-cupai-25/train_engineered.csv')
+        test = pd.read_csv('/home/majinrong/d2l-zh/housing-price-prediction-cupai-25/test_engineered.csv')
+        
+        selected_features = [
+            'median_income',
+            'ocean_proximity_INLAND',
+            'population_per_household',
+            'rooms_per_household',
+            'longitude',
+            'latitude'
+        ]
+        
+        preprocessor = ColumnTransformer([
+            ('log_scale', Pipeline([
+                ('log', FunctionTransformer(np.log1p)),
+                ('scaler', StandardScaler())
+            ]), ['population_per_household', 'rooms_per_household']),
+            ('zscore', StandardScaler(), ['median_income', 'longitude', 'latitude']),
+            ('dummy', 'passthrough', ['ocean_proximity_INLAND'])
+        ])
+        
+        X_train = preprocessor.fit_transform(train[selected_features])
+        y_train = train['median_house_value']
+        X_test = preprocessor.transform(test[selected_features])
+        
+        return X_train, y_train, X_test, test['Id']
+    
+    except Exception as e:
+        logging.error(f"数据加载失败: {str(e)}")
+        raise
+
+# 宽泛参数搜索空间
+def get_search_space():
+    """定义适用于LGBMRegressor的参数空间"""
+    return [{
+        'learning_rate': Real(0.005, 0.3, prior='log-uniform'),
+        'num_leaves': Integer(10, 200),
+        'max_depth': Integer(2, 12),
+        'min_child_samples': Integer(1, 100),
+        'reg_alpha': Real(0.0, 2.0),
+        'reg_lambda': Real(0.0, 2.0),
+        'subsample': Real(0.6, 1.0),
+        'colsample_bytree': Real(0.6, 1.0),
+        'n_estimators': Integer(100, 2000),
+        'boosting_type': Categorical(['gbdt', 'dart', 'goss'])
+    }]
+
+def main():
+    """主执行流程"""
+    try:
+        # 数据准备
+        X_train, y_train, X_test, test_ids = data_pipeline()
+        logging.info(f"训练数据形状: {X_train.shape}, 测试数据形状: {X_test.shape}")
+        
+        # 配置贝叶斯优化器
+        opt = BayesSearchCV(
+            estimator=LGBMRegressor(  # 替换为LightGBM模型
+                random_state=42,
+                objective='regression',
+                verbosity=-1  # 关闭LightGBM的日志输出
+            ),
+            search_spaces=get_search_space(),
+            n_iter=100,
+            cv=3,
+            scoring='neg_mean_squared_error',
+            n_jobs=6,
+            verbose=3
+        )
+        
+        # 执行参数优化
+        logging.info("开始贝叶斯优化搜索...")
+        opt.fit(X_train, y_train)
+        
+        # 记录最佳参数
+        best_params = opt.best_params_
+        best_rmse = np.sqrt(-opt.best_score_)
+        logging.info(f"\n=== 最佳参数组合 ===\n{best_params}")
+        logging.info(f"最佳验证RMSE: {best_rmse:.2f}")
+        
+        # 生成最终预测
+        final_pred = opt.best_estimator_.predict(X_test)
+        
+        # 保存结果
+        pd.DataFrame({
+            "Id": test_ids,
+            "median_house_value": final_pred.clip(0, 500000)  # 添加合理值范围限制
+        }).to_csv("final_predictions.csv", index=False)
+        logging.info("预测结果已保存至 final_predictions.csv")
+        
+    except Exception as e:
+        logging.error(f"执行失败: {str(e)}")
+        raise
+
+if __name__ == "__main__":
+    main()
